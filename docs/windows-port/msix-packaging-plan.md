@@ -275,8 +275,8 @@ Current status:
 
 - manifest template and rendered dev manifest exist
 - visual asset mapping exists
-- Electron packaging handoff now exists at [`package-electron-app.ps1`](/C:/Users/w.siener/repos/masko-code-win64/scripts/windows/package-electron-app.ps1)
-- a dev MSIX staging script now exists at [`build-dev-msix.ps1`](/C:/Users/w.siener/repos/masko-code-win64/scripts/windows/build-dev-msix.ps1)
+- Electron packaging handoff now exists at [`package-electron-app.ps1`](../../scripts/windows/package-electron-app.ps1)
+- a dev MSIX staging script now exists at [`build-dev-msix.ps1`](../../scripts/windows/build-dev-msix.ps1)
 - install, uninstall, and validation loop scripts now exist for repeated packaged testing
 
 Current staging command:

@@ -8,7 +8,7 @@ Use this for the first dev-signed MSIX builds.
 - `npm run packaging:windows:prepare-app`
 - `npm run assets:windows`
 - `npm run packaging:windows:manifest`
-- packaged Windows app layout copied under [`packaging/windows/input/app`](/C:/Users/w.siener/repos/masko-code-win64/packaging/windows/input/README.md)
+- packaged Windows app layout copied under [`packaging/windows/input/app`](../../packaging/windows/input/README.md)
 - `npm run packaging:windows:stage-msix`
 - if Windows SDK tools are available, run the generated `makeappx` and `signtool` commands from the instructions file under `packaging/windows/out`
 

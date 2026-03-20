@@ -2,7 +2,7 @@
 
 ## Implemented foundations
 
-- stable Windows package metadata placeholder in [`package-metadata.json`](/C:/Users/w.siener/repos/masko-code-win64/packaging/windows/package-metadata.json)
+- stable Windows package metadata placeholder in [`package-metadata.json`](../../packaging/windows/package-metadata.json)
 - runtime-mode detection for distinguishing development vs packaged runs
 - diagnostics visibility for packaged/runtime state
 - MSIX packaging strategy and validation checklists
