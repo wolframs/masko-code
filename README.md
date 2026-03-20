@@ -170,3 +170,19 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for how to get involved.
 ---
 
 > **Note:** This project has no cryptocurrency or token associated with it. Any coin using the Masko or Clippy name is not affiliated with us.
+
+## Windows Port
+
+A Windows 11 port using Electron and Node.js lives alongside the macOS codebase:
+
+- `packages/core/` — Platform-neutral hook ingestion, approval workflow, session state
+- `apps/windows-shell/` — Electron tray app with overlay, mascots, diagnostics
+- `docs/windows-port/` — Architecture audit, migration matrix, packaging plans
+
+See [docs/windows-port/](docs/windows-port/) for details. Requires Node.js 20+ and npm.
+
+```bash
+npm install
+npm test
+npm run start:windows-shell
+```
