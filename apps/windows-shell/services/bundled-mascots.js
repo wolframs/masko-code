@@ -6,7 +6,7 @@ import { defaultMascotConfig } from "../renderer/default-mascot-config.js";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const repoRoot = path.resolve(__dirname, "..", "..", "..");
-const defaultsDir = path.join(repoRoot, "source", "Sources", "Resources", "Defaults");
+const defaultsDir = path.join(repoRoot, "Sources", "Resources", "Defaults");
 
 export const bundledPresetSlugs = [
   "madame-patate",

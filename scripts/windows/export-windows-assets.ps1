@@ -1,5 +1,5 @@
 param(
-  [string]$SourceIcon = ".\source\Sources\Resources\Images\app-icon.png",
+  [string]$SourceIcon = ".\Sources\Resources\Images\app-icon.png",
   [string]$OutputDir = ".\packaging\windows\assets\generated",
   [switch]$IncludePixelArtFallback
 )
