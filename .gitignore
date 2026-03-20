@@ -10,3 +10,16 @@ DerivedData/
 # Gradle (JetBrains plugin)
 .gradle/
 .kotlin/
+
+# Node / npm
+node_modules/
+dist/
+coverage/
+
+# Windows
+Thumbs.db
+
+# Build artifacts
+.tmp/
+packaging/windows/out/
+packaging/windows/out-test/
