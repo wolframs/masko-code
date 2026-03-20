@@ -1,0 +1,19 @@
+{
+  "identityName": "ai.masko.code.win64",
+  "version": "0.1.0",
+  "displayName": "Masko Code",
+  "executableBaseName": "MaskoCode",
+  "productName": "MaskoCode",
+  "applicationId": "MaskoCode",
+  "executablePath": "MaskoCode.exe",
+  "publisher": "CN=MASKO-DEV",
+  "publisherDisplayName": "Masko",
+  "description": "A desktop companion for Claude Code with overlay approvals, mascot states, and editor handoff.",
+  "protocols": [
+    {
+      "name": "masko",
+      "displayName": "Masko URL"
+    }
+  ],
+  "appUserModelId": "ai.masko.code.win64"
+}

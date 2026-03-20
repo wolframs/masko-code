@@ -1,0 +1,13 @@
+{
+  "sourceDir": "apps/windows-shell",
+  "outDir": "packaging/windows/input",
+  "platform": "win32",
+  "arch": "x64",
+  "productName": "MaskoCode",
+  "appName": "Masko Code",
+  "asar": true,
+  "overwrite": true,
+  "prune": false,
+  "icon": "packaging/windows/assets/pixel-art/MaskoCode.ico",
+  "executableName": "MaskoCode"
+}
