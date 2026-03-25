@@ -1,6 +1,7 @@
 # CLAUDE.md
 
-Windows port living alongside the macOS codebase. The macOS source (`Sources/`, `Package.swift`) is in the repo root. Goal: merge this back upstream via PR.
+Windows port living alongside the macOS codebase. The macOS source (`Sources/`, `Package.swift`) is in the repo root.
+FINAL goal: merge this back upstream via PR when it's done. Definition of done: Get the windows port to complete feature parity with the macos implementation.
 
 ## Commands
 
@@ -44,6 +45,7 @@ npm workspaces monorepo. Core is platform-neutral; shell is Windows/Electron.
 - ESM everywhere, `.js` extensions in imports
 - No transpilation or bundling — plain Node.js + vanilla browser JS
 - Tests: `node:test` + `node:assert/strict`, fakes defined inline
+- **TDD: write failing tests first, then implement to make them pass**
 - Constructor injection for all platform services
 - Snake_case payloads from Claude hooks → camelCase at `normalizeEvent()` boundary
 - Windows platform calls via PowerShell through `child_process.execFile`

@@ -74,23 +74,43 @@ export function mascotInputsFromState(state) {
     return now - lastEventAt <= staleRunningMs;
   });
 
+  const isWorking = workingSessions.length > 0;
+  const isIdle = activeSessions.length === 0 || (!compacting && workingSessions.length === 0);
+  const isAlert = visibleApprovals.length > 0;
+  const sessionCount = activeSessions.length;
+
   return {
-    "claudeCode::isWorking": workingSessions.length > 0,
-    "claudeCode::isIdle": activeSessions.length === 0 || (!compacting && workingSessions.length === 0),
-    "claudeCode::isAlert": visibleApprovals.length > 0,
+    "claudeCode::isWorking": isWorking,
+    "claudeCode::isIdle": isIdle,
+    "claudeCode::isAlert": isAlert,
     "claudeCode::isCompacting": compacting,
-    "claudeCode::sessionCount": activeSessions.length
+    "claudeCode::sessionCount": sessionCount,
+    "agent::isWorking": isWorking,
+    "agent::isIdle": isIdle,
+    "agent::isAlert": isAlert,
+    "agent::isCompacting": compacting,
+    "agent::sessionCount": sessionCount
   };
 }
 
 export class MascotStateMachine {
-  constructor(config) {
+  constructor(config, { clock = Date.now } = {}) {
     this.config = config;
+    this.clock = clock;
     this.inputs = mascotInputsFromState({});
-    this.currentNodeId = config.initialNode;
-    this.phase = "loop";
+    if (Array.isArray(config.inputs)) {
+      for (const input of config.inputs) {
+        if (input.name && input.defaultValue !== undefined) {
+          this.inputs[input.name] = input.defaultValue;
+        }
+      }
+    }
     this.pendingEdge = null;
-    this.currentMedia = this.#loopMediaForNode(this.currentNodeId);
+    this.pendingTarget = null;
+    this.anyStateEdges = config.edges
+      .filter(e => e.source === "*" && !e.isLoop)
+      .sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+    this.#arriveAtNode(config.initialNode);
   }
 
   get currentNode() {
@@ -111,8 +131,19 @@ export class MascotStateMachine {
       nodeName: this.currentNodeName,
       phase: this.phase,
       media: this.currentMedia,
-      thumbnailUrl: this.currentThumbnailUrl
+      thumbnailUrl: this.currentThumbnailUrl,
+      pendingTarget: this.pendingTarget,
+      nodeTimeThresholds: this.getNodeTimeThresholds()
     };
+  }
+
+  #arriveAtNode(nodeId) {
+    this.currentNodeId = nodeId;
+    this.phase = "loop";
+    this.currentMedia = this.#loopMediaForNode(nodeId);
+    this.nodeArrivalTime = this.clock();
+    this.inputs["nodeTime"] = 0;
+    this.inputs["loopCount"] = 0;
   }
 
   applyInputs(nextInputs) {
@@ -120,7 +151,34 @@ export class MascotStateMachine {
       ...this.inputs,
       ...nextInputs
     };
+    this.inputs["nodeTime"] = this.clock() - this.nodeArrivalTime;
     if (this.phase === "transition") {
+      if (this.anyStateEdges.length > 0) {
+        const best = this.#bestAnyStateMatch();
+        if (best && best.target !== this.pendingEdge?.target) {
+          this.pendingTarget = best.target;
+        } else if (!best && this.pendingTarget) {
+          this.pendingTarget = null;
+        }
+      }
+      return this.snapshot();
+    }
+    const anyEdge = this.#bestAnyStateMatch();
+    if (anyEdge) {
+      const direct = this.#findDirectEdge(this.currentNodeId, anyEdge.target);
+      if (direct) {
+        this.pendingTarget = null;
+        this.pendingEdge = direct;
+      } else {
+        this.pendingTarget = anyEdge.target;
+        const fallback = this.#findFallbackEdge(this.currentNodeId);
+        this.pendingEdge = fallback ?? anyEdge;
+      }
+      this.phase = "transition";
+      this.currentMedia = {
+        url: mediaUrlForEdge(this.pendingEdge),
+        loop: false
+      };
       return this.snapshot();
     }
     const edge = this.#matchingTransition();
@@ -144,10 +202,114 @@ export class MascotStateMachine {
     }
     const targetId = this.pendingEdge.target;
     this.pendingEdge = null;
-    this.currentNodeId = targetId;
-    this.phase = "loop";
-    this.currentMedia = this.#loopMediaForNode(targetId);
+    this.#arriveAtNode(targetId);
+    this.#resetTriggers();
+
+    if (this.pendingTarget) {
+      if (this.pendingTarget === targetId) {
+        this.pendingTarget = null;
+      } else {
+        const best = this.#bestAnyStateMatch();
+        if (best && best.target === this.pendingTarget) {
+          const direct = this.#findDirectEdge(targetId, this.pendingTarget);
+          if (direct) {
+            this.pendingTarget = null;
+            this.pendingEdge = direct;
+            this.phase = "transition";
+            this.currentMedia = { url: mediaUrlForEdge(direct), loop: false };
+            return this.snapshot();
+          }
+          const fallback = this.#findFallbackEdge(targetId);
+          if (fallback) {
+            this.pendingEdge = fallback;
+            this.phase = "transition";
+            this.currentMedia = { url: mediaUrlForEdge(fallback), loop: false };
+            return this.snapshot();
+          }
+        }
+        this.pendingTarget = null;
+      }
+    }
+
     return this.applyInputs({});
+  }
+
+  handleLoopCycleCompleted() {
+    if (this.phase !== "loop") return this.snapshot();
+    this.inputs["loopCount"] = (this.inputs["loopCount"] ?? 0) + 1;
+    return this.applyInputs({});
+  }
+
+  getNodeTimeThresholds() {
+    const allEdges = [
+      ...transitionEdgesForNode(this.config, this.currentNodeId),
+      ...this.anyStateEdges
+    ];
+    const values = new Set();
+    for (const edge of allEdges) {
+      const conditions = Array.isArray(edge.conditions) ? edge.conditions : [];
+      for (const cond of conditions) {
+        if (cond.input === "nodeTime" && typeof cond.value === "number") {
+          values.add(cond.value);
+        }
+      }
+    }
+    return [...values].sort((a, b) => a - b);
+  }
+
+  #bestAnyStateMatch() {
+    for (const edge of this.anyStateEdges) {
+      if (edge.target === this.currentNodeId) {
+        continue;
+      }
+      const conditions = Array.isArray(edge.conditions) ? edge.conditions : [];
+      if (conditions.length === 0) {
+        continue;
+      }
+      const matched = conditions.every((condition) => {
+        const left = conditionValue(this.inputs[condition.input]);
+        const right = conditionValue(condition.value);
+        return compareValues(left, condition.op ?? "==", right);
+      });
+      if (matched) {
+        return edge;
+      }
+    }
+    return null;
+  }
+
+  static #stateInputs = new Set([
+    "isWorking", "isIdle", "isAlert", "isCompacting", "sessionCount"
+  ]);
+
+  #resetTriggers() {
+    this.inputs["clicked"] = false;
+    this.inputs["mouseOver"] = false;
+    for (const key of Object.keys(this.inputs)) {
+      if ((key.startsWith("agent::") || key.startsWith("claudeCode::"))
+          && !MascotStateMachine.#stateInputs.has(key.split("::")[1])) {
+        this.inputs[key] = false;
+      }
+    }
+    if (Array.isArray(this.config.inputs)) {
+      for (const input of this.config.inputs) {
+        if (input.type === "trigger") {
+          this.inputs[input.name] = input.defaultValue ?? false;
+        }
+      }
+    }
+  }
+
+  #findFallbackEdge(fromId) {
+    return this.config.edges.find(
+      (e) => e.source === fromId && !e.isLoop && e.target !== fromId && mediaUrlForEdge(e)
+    ) ?? null;
+  }
+
+  #findDirectEdge(fromId, toId) {
+    return this.config.edges.find(
+      (e) => e.source === fromId && e.target === toId && !e.isLoop && mediaUrlForEdge(e)
+    ) ?? null;
   }
 
   #matchingTransition() {

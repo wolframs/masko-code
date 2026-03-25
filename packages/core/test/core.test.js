@@ -759,3 +759,181 @@ test("unknown notification types do not create app notifications", () => {
 
   assert.equal(notification, null);
 });
+
+// --- Fix A: Unbounded request body ---
+
+test("hook server returns 413 for oversized request body", async () => {
+  const controller = createController();
+  const server = new HookServer({ controller, port: 0 });
+  await server.start();
+
+  const bigBody = JSON.stringify({
+    hook_event_name: "Stop",
+    session_id: "s",
+    data: "x".repeat(200_000)
+  });
+
+  const response = await requestRaw({
+    port: server.port,
+    method: "POST",
+    path: "/hook",
+    body: bigBody
+  });
+
+  assert.equal(response.statusCode, 413);
+  await server.stop();
+});
+
+// --- Fix B: req.on('close') for permission connections ---
+
+test("client disconnect auto-dismisses pending permission", async () => {
+  const controller = createController();
+  const server = new HookServer({ controller, port: 0 });
+  await server.start();
+
+  await new Promise((resolve, reject) => {
+    const req = http.request({
+      host: "127.0.0.1",
+      port: server.port,
+      method: "POST",
+      path: "/hook",
+      headers: {
+        "content-type": "application/json"
+      }
+    });
+
+    const body = JSON.stringify({
+      hook_event_name: HookEventType.PERMISSION_REQUEST,
+      session_id: "session-close",
+      tool_name: "Bash",
+      tool_input: { command: "ls" }
+    });
+
+    // Swallow expected errors from destroying the socket
+    req.on("error", () => {});
+
+    req.setHeader("content-length", Buffer.byteLength(body));
+    req.write(body);
+    req.end();
+
+    setTimeout(() => {
+      try {
+        assert.equal(controller.approvals.pending.length, 1);
+      } catch (e) {
+        reject(e);
+        return;
+      }
+
+      // Destroy the client connection
+      req.destroy();
+
+      setTimeout(() => {
+        try {
+          assert.equal(controller.approvals.pending.length, 0);
+          resolve();
+        } catch (e) {
+          reject(e);
+        }
+      }, 100);
+    }, 100);
+  });
+
+  await server.stop();
+});
+
+// --- Fix C: Swallowed JSON error in /approvals/ ---
+
+test("malformed JSON to /approvals returns 400", async () => {
+  const controller = createController();
+  const server = new HookServer({ controller, port: 0 });
+  await server.start();
+
+  // Add a fake pending approval so the route is reachable
+  const pending = controller.approvals.add(
+    {
+      id: crypto.randomUUID(),
+      hookEventName: HookEventType.PERMISSION_REQUEST,
+      sessionId: "session-json",
+      toolName: "Edit",
+      toolInput: null
+    },
+    () => {}
+  );
+
+  const response = await requestRaw({
+    port: server.port,
+    method: "POST",
+    path: `/approvals/${pending.id}/allow`,
+    body: "{invalid-json"
+  });
+
+  assert.equal(response.statusCode, 400);
+  await server.stop();
+});
+
+// --- Fix D: Duplicate permission detection ---
+
+test("duplicate permission by toolUseId returns existing pending item", () => {
+  const controller = createController();
+  const event1 = {
+    id: crypto.randomUUID(),
+    hookEventName: HookEventType.PERMISSION_REQUEST,
+    sessionId: "s1",
+    toolName: "Edit",
+    toolUseId: "tool-dup-1",
+    toolInput: { file: "a.js" }
+  };
+
+  const p1 = controller.approvals.add(event1, () => {});
+  const p2 = controller.approvals.add({ ...event1, id: crypto.randomUUID() }, () => {});
+
+  assert.equal(p1.id, p2.id);
+  assert.equal(controller.approvals.pending.length, 1);
+});
+
+test("duplicate permission by canonical signature returns existing pending item", () => {
+  const controller = createController();
+  const base = {
+    hookEventName: HookEventType.PERMISSION_REQUEST,
+    sessionId: "s1",
+    agentId: null,
+    toolName: "Bash",
+    toolUseId: null,
+    toolInput: { command: "ls" }
+  };
+
+  const p1 = controller.approvals.add({ ...base, id: crypto.randomUUID() }, () => {});
+  const p2 = controller.approvals.add({ ...base, id: crypto.randomUUID() }, () => {});
+
+  assert.equal(p1.id, p2.id);
+  assert.equal(controller.approvals.pending.length, 1);
+});
+
+test("different events are both kept in pending", () => {
+  const controller = createController();
+  const p1 = controller.approvals.add(
+    { id: crypto.randomUUID(), hookEventName: HookEventType.PERMISSION_REQUEST, sessionId: "s1", toolName: "Edit", toolUseId: "t1", toolInput: { file: "a.js" } },
+    () => {}
+  );
+  const p2 = controller.approvals.add(
+    { id: crypto.randomUUID(), hookEventName: HookEventType.PERMISSION_REQUEST, sessionId: "s1", toolName: "Bash", toolUseId: "t2", toolInput: { command: "ls" } },
+    () => {}
+  );
+
+  assert.notEqual(p1.id, p2.id);
+  assert.equal(controller.approvals.pending.length, 2);
+});
+
+// --- Fix E: Stop event priority ---
+
+test("stop event notification has normal priority", () => {
+  const notification = notificationForEvent({
+    id: crypto.randomUUID(),
+    hookEventName: HookEventType.STOP,
+    sessionId: "session-stop",
+    cwd: "C:/repo/project",
+    lastAssistantMessage: "Done"
+  });
+
+  assert.equal(notification.priority, "normal");
+});

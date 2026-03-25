@@ -3,15 +3,28 @@ import { HookEventType } from "./event-types.js";
 import { normalizeEvent } from "./models.js";
 import { validateHookPayload } from "./hook-validator.js";
 
+const MAX_BODY_SIZE = 102_400;
+
 function readJsonBody(req) {
   return new Promise((resolve, reject) => {
     let data = "";
+    let byteLength = 0;
+    let rejected = false;
 
     req.setEncoding("utf8");
     req.on("data", (chunk) => {
+      byteLength += Buffer.byteLength(chunk, "utf8");
+      if (byteLength > MAX_BODY_SIZE) {
+        if (!rejected) {
+          rejected = true;
+          reject(new Error("payload_too_large"));
+        }
+        return;
+      }
       data += chunk;
     });
     req.on("end", () => {
+      if (rejected) return;
       try {
         const normalized = data.startsWith("\uFEFF") ? data.slice(1) : data;
         resolve(normalized ? JSON.parse(normalized) : {});
@@ -74,6 +87,15 @@ export class HookServer {
               });
               res.end(JSON.stringify(response.body));
             });
+            // Detect client disconnect -> auto-dismiss
+            const pending = this.controller.approvals.pending.find((p) => p.event === event);
+            if (pending) {
+              res.on("close", () => {
+                if (!res.writableFinished) {
+                  this.controller.approvals.removeWithoutResponse(pending.id);
+                }
+              });
+            }
             return;
           }
 
@@ -81,10 +103,11 @@ export class HookServer {
           res.writeHead(200, { "content-type": "application/json" });
           res.end(JSON.stringify({ ok: true }));
         } catch (error) {
+          const statusCode = error.message === "payload_too_large" ? 413 : 400;
           this.controller.logger.error("hook", "Hook request failed", {
             error: String(error.message ?? error)
           });
-          res.writeHead(400, { "content-type": "application/json" });
+          res.writeHead(statusCode, { "content-type": "application/json" });
           res.end(JSON.stringify({ error: String(error.message ?? error) }));
         }
         return;
@@ -92,7 +115,14 @@ export class HookServer {
 
       if (req.method === "POST" && req.url?.startsWith("/approvals/")) {
         const [, , approvalId, action] = req.url.split("/");
-        const payload = await readJsonBody(req).catch(() => ({}));
+        let payload;
+        try {
+          payload = await readJsonBody(req);
+        } catch {
+          res.writeHead(400, { "content-type": "application/json" });
+          res.end(JSON.stringify({ error: "invalid_json" }));
+          return;
+        }
         const extra = {};
 
         if (action === "allowWithAnswers" && payload.answers) {

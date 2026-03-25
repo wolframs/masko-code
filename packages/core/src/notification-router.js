@@ -63,7 +63,7 @@ export function notificationForEvent(event) {
         title: "Task Completed",
         body: truncate(event.lastAssistantMessage, 100) ?? `Claude Code finished in ${projectName}`,
         category: "session_lifecycle",
-        priority: "high",
+        priority: "normal",
         sessionId: event.sessionId,
         eventId: event.id
       });

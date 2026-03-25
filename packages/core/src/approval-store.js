@@ -37,17 +37,36 @@ export class ApprovalStore {
 
   add(event, resolver) {
     const cacheKey = `${event.sessionId ?? ""}|${event.agentId ?? ""}|${event.toolName ?? ""}`;
+    const resolvedId = event.toolUseId ?? this.preToolUseCache.get(cacheKey) ?? null;
+
+    // Duplicate by toolUseId
+    if (resolvedId) {
+      const dup = this.pending.find(
+        (p) => p.event.toolUseId === resolvedId || p.resolvedToolUseId === resolvedId
+      );
+      if (dup) return dup;
+    }
+
+    // Duplicate by canonical signature
+    const sig = this.#canonicalSignature(event);
+    const dupBySig = this.pending.find((p) => this.#canonicalSignature(p.event) === sig);
+    if (dupBySig) return dupBySig;
+
     const pending = {
       id: crypto.randomUUID(),
       event,
       resolver,
       receivedAt: new Date(),
-      resolvedToolUseId: event.toolUseId ?? this.preToolUseCache.get(cacheKey) ?? null
+      resolvedToolUseId: resolvedId
     };
 
     this.preToolUseCache.delete(cacheKey);
     this.pending.push(pending);
     return pending;
+  }
+
+  #canonicalSignature(event) {
+    return `${event.sessionId ?? ""}|${event.agentId ?? ""}|${event.toolName ?? ""}|${JSON.stringify(event.toolInput ?? null)}`;
   }
 
   collapse(id) {
