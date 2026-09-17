@@ -1,0 +1,14 @@
+# Canonical identity for Wolfram Siener.
+#
+# Display-only: git log / shortlog / blame honour this mapping. No commits are
+# rewritten and no hashes change. Delete this file to undo.
+#
+# Historic commits carry several identities because git was configured with the
+# work identity on a work machine. Identity is now assigned automatically by
+# conditional includes in ~/.gitconfig (see ~/.claude/CLAUDE.md, ~/.codex/AGENTS.md).
+
+Wolfram Siener <wolframs91@gmail.com> <wolframs91@gmail.com>
+Wolfram Siener <wolframs91@gmail.com> <w.siener@hegla-hanic.de>
+Wolfram Siener <wolframs91@gmail.com> <wolfram.siener@hegla-hanic.com>
+Wolfram Siener <wolframs91@gmail.com> <wolframs91@googlemail.com>
+Wolfram Siener <wolframs91@gmail.com> <5008890+wolframs@users.noreply.github.com>
